@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#b7c3d4">
+  <meta name="robots" content="noindex">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg">
+  <title>Control de parqueaderos</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="lib/html5-qrcode.min.js"></script>
+  <script src="ocr/tesseract.min.js"></script>
+</head>
+<body class="login-on">
+  <header class="top">
+    <div class="user-line">
+        <span id="avatar" class="avatar hidden"></span>
+        <div>
+          <h1>Parqueaderos</h1>
+          <p class="sub" id="who">Ingreso y salida de vehículos autorizados</p>
+        </div>
+      </div>
+    <button class="sec hidden" id="salir" style="width:auto;margin:0" type="button">Salir</button>
+  </header>
+
+  <section id="login" class="login-screen">
+    <div class="login-card">
+      <img class="logo" src="icon.svg" alt="Logo Control Parqueadero">
+      <h1 class="login-title">CONTROL PARQUEADERO</h1>
+      <p class="login-sub">Acceso de portería</p>
+      <label>Usuario <input id="user" autocomplete="username" placeholder="Usuario"></label>
+      <label>Clave
+        <span class="pass-wrap">
+          <input id="pass" type="password" autocomplete="current-password" placeholder="Clave">
+          <button class="ojo" id="ver-clave" type="button" aria-label="Ver clave">👁</button>
+        </span>
+      </label>
+      <button id="btn-login" type="button">Entrar</button>
+      <button class="sec" id="btn-registro" type="button">Crear cuenta</button>
+      <div id="login-msg" class="msg err hidden"></div>
+    </div>
+  </section>
+
+  <section id="registro" class="login-screen hidden">
+    <div class="login-card">
+      <img class="logo" src="icon.svg" alt="Logo Control Parqueadero">
+      <h1 class="login-title">AUTOREGISTRO</h1>
+      <p class="login-sub">Queda pendiente hasta que un master o el administrador lo autorice</p>
+      <label>Nombre <input id="r-nombre" placeholder="Nombre completo"></label>
+      <label>Usuario <input id="r-usuario" placeholder="Usuario"></label>
+      <label>Clave
+        <span class="pass-wrap">
+          <input id="r-clave" type="password" placeholder="Mínimo 6 caracteres">
+          <button class="ojo" type="button" id="ver-clave-reg">👁</button>
+        </span>
+      </label>
+      <button id="enviar-registro" type="button">Enviar registro</button>
+      <button class="sec" id="volver-login" type="button">Volver</button>
+      <div id="reg-msg" class="msg hidden"></div>
+    </div>
+  </section>
+
+  <section id="app" class="hidden">
+    <div class="tabs" id="tabs"></div>
+    <div id="panel"></div>
+    <div id="app-msg" class="msg hidden"></div>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,142 @@
+:root {
+  --bg: #b7c3d4;
+  --card: #ffffff;
+  --line: #d5deea;
+  --text: #1e293b;
+  --muted: #64748b;
+  --ok: #15803d;
+  --out: #b91c1c;
+  --gold: #d97706;
+}
+* { box-sizing: border-box; }
+body.login-on {
+  max-width: none;
+  background:
+    radial-gradient(circle at 15% 10%, rgba(6, 182, 212, .45), transparent 28%),
+    radial-gradient(circle at 90% 0%, rgba(124, 58, 237, .4), transparent 32%),
+    radial-gradient(circle at 70% 90%, rgba(16, 185, 129, .35), transparent 30%),
+    #07111f;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+body.login-on header,
+body.login-on #app { display: none; }
+.login-screen { width: min(100%, 420px); }
+.login-card {
+  background: rgba(255, 255, 255, .94);
+  border: 1px solid rgba(125, 211, 252, .8);
+  border-radius: 28px;
+  padding: 28px 22px 22px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(8, 47, 73, .35), 0 0 0 6px rgba(34, 211, 238, .12);
+}
+.logo { width: 84px; height: 84px; border-radius: 22px; }
+.login-title {
+  margin: 14px 0 4px;
+  font-size: 1.35rem;
+  letter-spacing: 1px;
+  color: #082f49;
+}
+.login-sub { margin: 0 0 8px; color: #0e7490; font-weight: 600; }
+.login-card label { text-align: left; }
+#btn-login {
+  background: linear-gradient(90deg, #0891b2, #7c3aed);
+  box-shadow: 0 10px 24px rgba(14, 116, 144, .35);
+}
+body {
+  margin: 0 auto;
+  max-width: 560px;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  padding: 16px 16px 40px;
+}
+h1 { font-size: 1.35rem; margin: 0 0 4px; }
+h2 { font-size: 1.05rem; margin: 0 0 10px; }
+p.sub, .muted { color: var(--muted); font-size: 0.9rem; }
+.card, form.card {
+  background: var(--card);
+  border: 1px solid #ffffff;
+  border-radius: 16px;
+  padding: 14px;
+  margin-top: 12px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, .12);
+}
+label { display: block; color: var(--muted); font-size: 0.82rem; margin-top: 10px; }
+input, textarea, select {
+  width: 100%;
+  margin-top: 4px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #f8fafc;
+  color: var(--text);
+  font-size: 16px;
+}
+textarea {
+  user-select: text;
+  -webkit-user-select: text;
+  min-height: 180px;
+}
+button, .btn {
+  border: 0;
+  border-radius: 12px;
+  padding: 14px 12px;
+  font-weight: 700;
+  color: white;
+  background: #1d4ed8;
+  width: 100%;
+  margin-top: 10px;
+  font-size: 1rem;
+}
+button.ok { background: var(--ok); }
+button.out { background: var(--out); }
+button.sec { background: #64748b; }
+.pass-wrap { position: relative; }
+.pass-wrap input { padding-right: 46px; }
+.ojo {
+  position: absolute;
+  right: 6px;
+  top: 28px;
+  width: 36px;
+  height: 36px;
+  margin: 0;
+  padding: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #334155;
+  font-size: 1.1rem;
+}
+.avatar, .avatar-lg {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #dbe4ef;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  color: #14532d;
+}
+.avatar-lg { width: 88px; height: 88px; font-size: 1.6rem; }
+.user-line { display: flex; gap: 10px; align-items: center; }
+button:disabled { opacity: 0.45; }
+.row { display: flex; gap: 8px; }
+.row button { margin-top: 0; }
+.top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.badge { font-size: 0.75rem; padding: 4px 8px; border-radius: 999px; background: #14532d; }
+.badge.warn { background: #92400e; }
+.badge.bad { background: #7f1d1d; }
+.item { border-top: 1px solid var(--line); padding: 10px 0; }
+.item strong { display: block; }
+#reader { width: 100%; min-height: 240px; border-radius: 12px; overflow: hidden; background: #020617; margin-top: 10px; }
+#video-placa { width: 100%; max-height: 320px; object-fit: cover; border: 3px solid #f5c400; border-radius: 12px; background: #000; margin-top: 10px; }
+.hidden { display: none !important; }
+.msg { white-space: pre-wrap; background: #dcfce7; color: #14532d; padding: 10px; border-radius: 10px; margin-top: 10px; }
+.err { background: #fee2e2; color: #991b1b; }
+.placa { font-size: 1.6rem; letter-spacing: 2px; font-weight: 800; }
+.tabs { display: flex; gap: 6px; overflow: auto; margin-top: 10px; }
+.tabs button { width: auto; margin: 0; background: #e2e8f0; color: #1e293b; padding: 10px 12px; font-size: 0.85rem; }
+.tabs button.on { background: #14532d; }
