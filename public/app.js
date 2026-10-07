@@ -566,20 +566,21 @@ async function previsualizar() {
     <button class="ok" id="guardar-aut" type="button">Guardar en el listado</button>`;
   $("guardar-aut").onclick = guardarAut;
   if (!leido.placa || !leido.nombre) msg("Se leyó el texto, pero falta placa o nombre. Complétalos abajo y guarda.", true);
-  else msg("Texto leído. Revisa los datos y pulsa Guardar en el listado.");
+  else msg("Texto leído: " + leido.nombre + ", placa " + leido.placa + (leido.fecha ? ", fecha " + leido.fecha : "") + ". Si el texto trae varios días, se usó el primer día. Revisa y guarda.");
 }
 
 function leerLocal(t) {
   t = limpiarTexto(t);
   const pick = (re) => (t.match(re) || [,""])[1].trim();
-  const placa = (pick(/placa\s*[:\-]?\s*([A-Za-z0-9\-]{4,8})/i) || (t.match(/\b[A-Z]{3}\d{3}\b|\b[A-Z]{3}\d{2}[A-Z]\b/i) || [""])[0]).toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const placa = (pick(/placas?\s*[:\-]?\s*([A-Za-z0-9\-]{4,8})/i) || (t.match(/\b[A-Z]{3}\d{3}\b|\b[A-Z]{3}\d{2}[A-Z]\b/i) || [""])[0]).toUpperCase().replace(/[^A-Z0-9]/g, "");
   const meses = { enero:"01", febrero:"02", marzo:"03", abril:"04", mayo:"05", junio:"06", julio:"07", agosto:"08", septiembre:"09", octubre:"10", noviembre:"11", diciembre:"12" };
+  const mesDe = (palabra) => meses[String(palabra || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")];
+  const anio = (t.match(/20\d{2}/) || ["2026"])[0];
+  const rangoFecha = t.match(/(\d{1,2})\s+al\s+(\d{1,2})\s+de\s+([A-Za-zÁÉÍÓÚáéíóú]+)/i);
   const mf = t.match(/(\d{1,2})\s+de\s+([A-Za-zÁÉÍÓÚáéíóú]+)/);
   let fecha = "";
-  if (mf) {
-    const mes = meses[mf[2].toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")];
-    if (mes) fecha = `${(t.match(/20\d{2}/) || ["2026"])[0]}-${mes}-${mf[1].padStart(2,"0")}`;
-  }
+  if (rangoFecha && mesDe(rangoFecha[3])) fecha = `${anio}-${mesDe(rangoFecha[3])}-${rangoFecha[1].padStart(2,"0")}`;
+  else if (mf && mesDe(mf[2])) fecha = `${anio}-${mesDe(mf[2])}-${mf[1].padStart(2,"0")}`;
   const rango = t.match(/(\d{1,2})(?::(\d{2}))?\s*(a\.\s*m\.|p\.\s*m\.|am|pm)?\s*a\s*(\d{1,2})(?::(\d{2}))?\s*(a\.\s*m\.|p\.\s*m\.|am|pm)?/i);
   const to24 = (h, min, mer) => {
     let hour = Number(h);
@@ -588,9 +589,17 @@ function leerLocal(t) {
     if (m.startsWith("a") && hour === 12) hour = 0;
     return String(hour).padStart(2, "0") + ":" + String(min || "00").padStart(2, "0");
   };
+  let nombre = pick(/nombre\s*[:\-]?\s*(.+)/i);
+  if (!nombre) {
+    const persona = t.match(/\b(?:director|directora|docente|profesor|profesora|señor|senor|señora|senora|conductor|propietario)\s+([A-Za-zÁÉÍÓÚáéíóúÑñ]+(?:\s+[A-Za-zÁÉÍÓÚáéíóúÑñ]+){1,4})/i);
+    if (persona) {
+      nombre = persona[1].split(/\s+/).filter(p => !/^(de|del|la|el|los|las|para|con|y|en)$/i.test(p)).slice(0, 4)
+        .map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(" ");
+    }
+  }
   return {
     placa,
-    nombre: pick(/nombre\s*[:\-]?\s*(.+)/i),
+    nombre,
     cedula: pick(/c[eé]dula\s*[:\-]?\s*([0-9.\s]+)/i),
     solicitud: (t.match(/SOL-\d+/i) || [""])[0].toUpperCase(),
     fecha,
