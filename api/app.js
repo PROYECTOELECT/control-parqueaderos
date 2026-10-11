@@ -238,6 +238,22 @@ async function handler(req, res) {
       return send(res, 200, { usuario: publicUser(user) });
     }
 
+    if (path === "/autorizaciones/ajustar" && method === "POST") {
+      if (!["administrador", "master"].includes(me.rol)) return send(res, 403, { error: "Solo administrador o master ajustan el horario" });
+      const aut = db.autorizaciones.find(a => a.id === body.id);
+      if (!aut) return send(res, 404, { error: "Permiso no encontrado" });
+      if (!body.fecha || !body.horaInicio || !body.horaFin) return send(res, 400, { error: "Faltan fecha u horario" });
+      if (!String(body.notaAjuste || "").trim()) return send(res, 400, { error: "Escribe la nota del ajuste" });
+      aut.fecha = body.fecha;
+      aut.horaInicio = body.horaInicio;
+      aut.horaFin = body.horaFin;
+      aut.notaAjuste = String(body.notaAjuste).slice(0, 300);
+      aut.ajustadoPor = me.nombre;
+      aut.ajustadoEn = bogotaStamp(new Date());
+      await writeDb(db);
+      return send(res, 200, { autorizacion: { ...aut, vigencia: vigencia(aut) } });
+    }
+
     if (path === "/autorizaciones/borrar" && method === "POST") {
       if (!["administrador", "master"].includes(me.rol)) return send(res, 403, { error: "Solo administrador o master pueden borrar permisos" });
       const antes = db.autorizaciones.length;
@@ -305,6 +321,9 @@ async function handler(req, res) {
       const aut = db.autorizaciones.find(a => normPlaca(a.placa) === placa);
       if (!aut) return send(res, 404, { error: "La placa no está en el listado autorizado" });
       const vig = vigencia(aut);
+      if (tipo === "Ingreso" && vig.estado !== "vigente") {
+        return send(res, 403, { error: "No se puede registrar el ingreso. " + vig.texto + ". Un master o el administrador debe ajustar el horario." });
+      }
       const ahora = new Date();
       const bogota = bogotaStamp(ahora);
       const reg = {
