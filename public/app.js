@@ -175,15 +175,25 @@ async function historialHtml() {
 
 async function listaPermisosHtml() {
   const data = await api("/autorizaciones");
-  const puedeBorrar = state.user.rol === "administrador" || state.user.rol === "master";
+  const puedeAjustar = state.user.rol === "administrador" || state.user.rol === "master";
   const filas = data.autorizaciones.slice().reverse().map(a => `
     <div class="item">
       <strong class="placa">${a.placa}</strong>
       ${a.nombre}<br>
       <span class="muted">${a.cedula || "—"} · ${a.solicitud} · ${a.fecha || "sin fecha"} ${a.horaInicio}-${a.horaFin}</span><br>
       <span class="muted">Cargado: ${a.creadoEnBogota || a.creadoEn || "sin hora"} · ${a.creadoPorNombre || a.origen || ""}</span><br>
+      ${a.notaAjuste ? `<span class="muted">Ajuste: ${a.notaAjuste} · ${a.ajustadoPor || ""} ${a.ajustadoEn || ""}</span><br>` : ""}
       ${badge(a.vigencia)}
-      ${puedeBorrar ? `<button class="out" data-borrar="${a.id}" type="button">Borrar</button>` : ""}
+      ${puedeAjustar ? `
+        <label>Fecha <input id="aj-fecha-${a.id}" type="date" value="${a.fecha || ""}"></label>
+        <div class="row">
+          <label>Desde <input id="aj-ini-${a.id}" type="time" value="${a.horaInicio || "07:00"}"></label>
+          <label>Hasta <input id="aj-fin-${a.id}" type="time" value="${a.horaFin || "13:00"}"></label>
+        </div>
+        <label>Nota del ajuste <input id="aj-nota-${a.id}" value="${a.notaAjuste || ""}" placeholder="Llegó fuera del horario autorizado"></label>
+        <button class="sec" data-ajustar="${a.id}" type="button">Ajustar horario</button>
+        <button class="out" data-borrar="${a.id}" type="button">Borrar</button>
+      ` : ""}
     </div>`).join("") || "<p class='muted'>Todavía no hay permisos cargados.</p>";
   return `<div class="card"><h2>Permisos cargados</h2><p class="muted">Este listado lo pueden ver todos los usuarios.</p>${filas}</div>`;
 }
@@ -228,6 +238,7 @@ function bind(tab) {
   }
   if (tab === "carga" || tab === "permisos") {
     document.querySelectorAll("[data-borrar]").forEach(b => b.onclick = () => borrarPermiso(b.dataset.borrar, tab));
+    document.querySelectorAll("[data-ajustar]").forEach(b => b.onclick = () => ajustarPermiso(b.dataset.ajustar, tab));
   }
   if (tab === "usuarios") {
     $("crear-user").onclick = crearUsuario;
@@ -326,15 +337,18 @@ async function exportarPdf() {
 }
 
 function fichaHtml(a) {
+  const puedeEntrar = a.vigencia?.estado === "vigente";
   return `
     <div class="card">
       <div class="placa">${a.placa}</div>
       ${badge(a.vigencia)}
       <p><strong>${a.nombre}</strong><br>Cédula ${a.cedula || "—"}</p>
       <p class="muted">Solicitud ${a.solicitud}<br>${a.fecha || "sin fecha"} · ${a.horaInicio} a ${a.horaFin}<br>${a.asunto || ""}<br>${a.solicitante || ""} ${a.programa || ""}</p>
+      ${a.notaAjuste ? `<p class="muted">Ajuste: ${a.notaAjuste}<br>${a.ajustadoPor || ""} · ${a.ajustadoEn || ""}</p>` : ""}
+      ${puedeEntrar ? "" : `<p class="msg err">No se puede registrar el ingreso: ${a.vigencia?.texto || "fuera del horario"}. Un master o el administrador debe ajustar la fecha y el horario.</p>`}
       <label>Nota <input id="nota" placeholder="Opcional"></label>
       <div class="row">
-        <button class="ok" id="ingreso" type="button">Registrar ingreso</button>
+        <button class="ok" id="ingreso" type="button" ${puedeEntrar ? "" : "disabled"}>Registrar ingreso</button>
         <button class="out" id="salida" type="button">Registrar salida</button>
       </div>
     </div>`;
@@ -625,6 +639,23 @@ async function guardarAut() {
     });
     msg("Permiso guardado. Ya aparece en el listado.");
     show("carga");
+  } catch (err) { msg(err.message, true); }
+}
+
+async function ajustarPermiso(id, tab) {
+  try {
+    await api("/autorizaciones/ajustar", {
+      method: "POST",
+      body: {
+        id,
+        fecha: $("aj-fecha-" + id).value,
+        horaInicio: $("aj-ini-" + id).value,
+        horaFin: $("aj-fin-" + id).value,
+        notaAjuste: $("aj-nota-" + id).value
+      }
+    });
+    msg("Horario ajustado. La portería ya puede registrar el ingreso si está dentro de la nueva fecha y hora.");
+    show(tab || "permisos");
   } catch (err) { msg(err.message, true); }
 }
 
