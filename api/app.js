@@ -280,9 +280,18 @@ async function handler(req, res) {
 
     if (path.startsWith("/autorizaciones") && method === "GET") {
       const ruta = new URLSearchParams((req.url || "").split("?")[1] || "").get("ruta") || "";
-      const q = normPlaca((ruta.split("placa=")[1] || "").split("&")[0]);
+      const raw = decodeURIComponent((ruta.split("placa=")[1] || "").split("&")[0]);
+      const q = normPlaca(raw);
       let lista = db.autorizaciones;
-      if (q) lista = lista.filter(a => normPlaca(a.placa) === q);
+      if (q) {
+        lista = lista.filter(a => normPlaca(a.placa) === q);
+        lista.sort((a, b) => {
+          const va = vigencia(a).estado === "vigente" ? 0 : 1;
+          const vb = vigencia(b).estado === "vigente" ? 0 : 1;
+          if (va !== vb) return va - vb;
+          return String(b.creadoEn || "").localeCompare(String(a.creadoEn || ""));
+        });
+      }
       return send(res, 200, {
         autorizaciones: lista.map(a => ({ ...a, placa: formatoPlaca(a.placa), vigencia: vigencia(a) }))
       });
