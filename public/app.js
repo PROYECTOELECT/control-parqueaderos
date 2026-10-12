@@ -599,8 +599,8 @@ async function leerPlacaFoto(automatica) {
       if (!automatica) $("ocr-estado").textContent = "No coincidió con un permiso. Acerca la placa al recuadro. Visto: " + textos.join(" ").replace(/\s+/g, " ").slice(0, 40);
       return;
     }
-    $("placa").value = placa;
-    $("ocr-estado").textContent = "Placa leída: " + placa;
+    $("placa").value = formatoPlaca(placa);
+    $("ocr-estado").textContent = "Placa leída: " + formatoPlaca(placa);
     await stopPlaca();
     buscar();
   } catch (err) {
@@ -626,6 +626,12 @@ async function stopPlaca() {
   if (cap) cap.classList.add("hidden");
   const btn = $("camara-placa");
   if (btn) btn.textContent = "Placa";
+}
+
+function formatoPlaca(v) {
+  const p = String(v || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (/^[A-Z]{3}\d{3}$/.test(p) || /^[A-Z]{3}\d{2}[A-Z]$/.test(p)) return p.slice(0, 3) + " " + p.slice(3);
+  return p;
 }
 
 function extraerPlaca(text) {
@@ -706,7 +712,7 @@ async function previsualizar() {
 function leerLocal(t) {
   t = limpiarTexto(t);
   const pick = (re) => (t.match(re) || [,""])[1].trim();
-  const placa = extraerPlaca(t);
+  const placa = formatoPlaca(extraerPlaca(t));
   const meses = { enero:"01", febrero:"02", marzo:"03", abril:"04", mayo:"05", junio:"06", julio:"07", agosto:"08", septiembre:"09", octubre:"10", noviembre:"11", diciembre:"12" };
   const mesDe = (palabra) => meses[String(palabra || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")];
   const anio = (t.match(/20\d{2}/) || ["2026"])[0];
