@@ -44,13 +44,22 @@ async function userFrom(db, req) {
   return db.users.find(u => u.id === ses.userId && u.activo) || null;
 }
 
+function extraerPlaca(text) {
+  const raw = String(text || "").toUpperCase();
+  const separado = raw.match(/[A-Z]{3}[\s.\-]*\d{3}|[A-Z]{3}[\s.\-]*\d{2}[\s.\-]*[A-Z]/);
+  if (separado) return separado[0].replace(/[^A-Z0-9]/g, "");
+  const compact = raw.replace(/[^A-Z0-9]/g, "");
+  const junto = compact.match(/[A-Z]{3}\d{3}|[A-Z]{3}\d{2}[A-Z]/);
+  return junto ? junto[0] : "";
+}
+
 function parseAutorizacion(texto) {
   const t = String(texto || "");
   const pick = (re) => {
     const m = t.match(re);
     return m ? m[1].trim() : "";
   };
-  const placa = normPlaca(pick(/placa\s*:\s*([A-Za-z0-9\-]{4,8})/i));
+  const placa = normPlaca(pick(/placas?\s*[:\-]?\s*([A-Za-z0-9\-\s]{4,10})/i)) || extraerPlaca(t);
   const nombre = pick(/nombre\s*:\s*(.+)/i);
   const cedula = pick(/c[eé]dula\s*:\s*([0-9.\s]+)/i).replace(/\s+/g, "");
   const solicitud = (t.match(/SOL-\d+/i) || [""])[0].toUpperCase();
