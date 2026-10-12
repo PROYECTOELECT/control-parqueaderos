@@ -366,7 +366,7 @@ async function buscar() {
   const placa = ($("placa").value || "").trim();
   if (!placa) return msg("Escribe o lee una placa.", true);
   try {
-    const data = await api("/autorizaciones?placa=" + encodeURIComponent(placa));
+    const data = await api("/autorizaciones?placa=" + placa);
     const a = data.autorizaciones[0];
     state.actual = a || null;
     const ficha = $("ficha");
