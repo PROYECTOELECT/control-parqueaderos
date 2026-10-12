@@ -78,7 +78,7 @@ function porteriaHtml() {
       </div>
       <div id="reader" class="hidden"></div>
       <div id="placa-visor" class="hidden">
-        <video id="video-placa" playsinline autoplay muted></video>
+        <video id="video-placa" playsinline muted></video>
         <div class="marco-placa"></div>
       </div>
       <canvas id="canvas-placa" class="hidden"></canvas>
@@ -414,7 +414,9 @@ async function toggleQr() {
 }
 
 async function togglePlaca() {
+  if (state.abriendo) return;
   if (state.stream) return stopPlaca();
+  state.abriendo = true;
   await stopScan();
   const video = $("video-placa");
   const visor = $("placa-visor");
@@ -423,27 +425,34 @@ async function togglePlaca() {
       audio: false,
       video: {
         facingMode: { ideal: "environment" },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 }
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
       }
     });
     const track = state.stream.getVideoTracks()[0];
     const caps = track.getCapabilities ? track.getCapabilities() : {};
     const advanced = [];
     if (caps.focusMode && caps.focusMode.includes("continuous")) advanced.push({ focusMode: "continuous" });
-    if (caps.torch) advanced.push({ torch: true });
     if (advanced.length) { try { await track.applyConstraints({ advanced }); } catch (e) {} }
+    video.muted = true;
+    video.playsInline = true;
     video.srcObject = state.stream;
     visor.classList.remove("hidden");
-    await video.play();
+    try { await video.play(); } catch (e) {
+      if (e.name !== "AbortError" && !video.videoWidth) throw e;
+    }
     $("capturar").classList.remove("hidden");
-    $("capturar").onclick = leerPlacaFoto;
+    $("capturar").onclick = () => leerPlacaFoto(false);
     $("camara-placa").textContent = "Cerrar placa";
     $("ocr-estado").textContent = "Encuadra la placa amarilla dentro del recuadro. El lector busca sola.";
+    $("app-msg").classList.add("hidden");
     state.leyendo = false;
-    state.placaTimer = setInterval(() => { if (!state.leyendo) leerPlacaFoto(true); }, 1600);
+    state.placaTimer = setInterval(() => { if (!state.leyendo && video.videoWidth) leerPlacaFoto(true); }, 1800);
   } catch (err) {
-    msg("No se abrió la cámara. Entra por HTTPS y permite la cámara.\n" + err, true);
+    stopPlaca();
+    msg("No se abrió la cámara. Entra por HTTPS y permite la cámara.\n" + (err.message || err), true);
+  } finally {
+    state.abriendo = false;
   }
 }
 
