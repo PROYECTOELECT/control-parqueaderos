@@ -474,7 +474,7 @@ async function motorOcr() {
 }
 
 function esAmarillo(r, g, b) {
-  return r > 150 && g > 120 && b < 140 && r > b + 35 && g > b + 20;
+  return r > 140 && g > 110 && b < 170 && r + g > b * 2.2;
 }
 
 function recortePlaca(video) {
@@ -485,49 +485,73 @@ function recortePlaca(video) {
   tmp.height = h;
   const tctx = tmp.getContext("2d", { willReadFrequently: true });
   tctx.drawImage(video, 0, 0);
-  const data = tctx.getImageData(0, 0, w, h).data;
-  let minX = w, minY = h, maxX = 0, maxY = 0, n = 0;
-  const step = 4;
-  for (let y = Math.floor(h * 0.2); y < h * 0.8; y += step) {
-    for (let x = Math.floor(w * 0.05); x < w * 0.95; x += step) {
+  const src = tctx.getImageData(0, 0, w, h).data;
+  const filas = [];
+  for (let y = 0; y < h; y += 3) {
+    let n = 0, minX = w, maxX = 0;
+    for (let x = 0; x < w; x += 4) {
       const i = (y * w + x) * 4;
-      if (esAmarillo(data[i], data[i + 1], data[i + 2])) {
+      if (esAmarillo(src[i], src[i + 1], src[i + 2])) {
         n++;
         if (x < minX) minX = x;
-        if (y < minY) minY = y;
         if (x > maxX) maxX = x;
-        if (y > maxY) maxY = y;
       }
     }
+    filas.push({ y, n, minX, maxX });
   }
+  const bandas = [];
+  let actual = null;
+  for (const f of filas) {
+    if (f.n > 8) {
+      if (!actual) actual = { y1: f.y, y2: f.y, minX: f.minX, maxX: f.maxX, n: f.n };
+      else {
+        actual.y2 = f.y;
+        actual.minX = Math.min(actual.minX, f.minX);
+        actual.maxX = Math.max(actual.maxX, f.maxX);
+        actual.n += f.n;
+      }
+    } else if (actual) {
+      bandas.push(actual);
+      actual = null;
+    }
+  }
+  if (actual) bandas.push(actual);
+  const centro = h / 2;
+  const placa = bandas
+    .filter(b => b.y2 - b.y1 > 18 && b.maxX - b.minX > w * 0.12)
+    .sort((a, b) => Math.abs((a.y1 + a.y2) / 2 - centro) - Math.abs((b.y1 + b.y2) / 2 - centro))[0];
   let sx, sy, sw, sh;
-  if (n > 80 && maxX - minX > w * 0.18 && maxY - minY > 12) {
-    const padX = (maxX - minX) * 0.08;
-    const padY = (maxY - minY) * 0.18;
-    sx = Math.max(0, minX - padX);
-    sy = Math.max(0, minY - padY);
-    sw = Math.min(w - sx, maxX - minX + padX * 2);
-    sh = Math.min(h - sy, maxY - minY + padY * 2);
+  if (placa) {
+    const padX = (placa.maxX - placa.minX) * 0.06;
+    const padY = (placa.y2 - placa.y1) * 0.12;
+    sx = Math.max(0, placa.minX - padX);
+    sy = Math.max(0, placa.y1 - padY);
+    sw = Math.min(w - sx, placa.maxX - placa.minX + padX * 2);
+    sh = Math.min(h - sy, placa.y2 - placa.y1 + padY * 2);
   } else {
-    sw = w * 0.86;
-    sh = h * 0.24;
+    sw = w * 0.72;
+    sh = h * 0.22;
     sx = (w - sw) / 2;
-    sy = h * 0.34;
+    sy = (h - sh) / 2;
   }
   const canvas = $("canvas-placa");
-  const outW = 900;
-  const outH = Math.max(180, Math.round(outW * (sh / sw)));
+  const outW = 1100;
+  const outH = Math.max(160, Math.round(outW * (sh / sw)));
   canvas.width = outW;
   canvas.height = outH;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, outW, outH);
   ctx.drawImage(video, sx, sy, sw, sh, 0, 0, outW, outH);
   const img = ctx.getImageData(0, 0, outW, outH);
   for (let i = 0; i < img.data.length; i += 4) {
-    let g = img.data[i] * 0.25 + img.data[i + 1] * 0.65 + img.data[i + 2] * 0.1;
-    g = g > 145 ? 255 : 0;
-    img.data[i] = img.data[i + 1] = img.data[i + 2] = g;
+    const r = img.data[i], g = img.data[i + 1], b = img.data[i + 2];
+    const oscuro = r < 90 && g < 90 && b < 90;
+    const v = oscuro ? 0 : 255;
+    img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
   }
   ctx.putImageData(img, 0, 0);
+  canvas.classList.remove("hidden");
   return canvas;
 }
 
@@ -596,7 +620,8 @@ async function leerPlacaFoto(automatica) {
     }
     const placa = mejorPlaca(textos, placas);
     if (!placa || !placas.includes(placa)) {
-      if (!automatica) $("ocr-estado").textContent = "No coincidió con un permiso. Acerca la placa al recuadro. Visto: " + textos.join(" ").replace(/\s+/g, " ").slice(0, 40);
+      const visto = textos.join(" ").replace(/\s+/g, " ").trim();
+      if (!automatica) $("ocr-estado").textContent = "No coincidió. Encuadra una sola placa, de frente y sin reflejo. Visto: " + (visto || "nada");
       return;
     }
     $("placa").value = formatoPlaca(placa);
