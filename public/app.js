@@ -629,9 +629,12 @@ async function stopPlaca() {
 }
 
 function extraerPlaca(text) {
-  const compact = String(text || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-  const hits = compact.match(/[A-Z]{3}\d{3}|[A-Z]{3}\d{2}[A-Z]/g);
-  return hits ? hits[0] : "";
+  const raw = String(text || "").toUpperCase();
+  const separado = raw.match(/[A-Z]{3}[\s.\-]*\d{3}|[A-Z]{3}[\s.\-]*\d{2}[\s.\-]*[A-Z]/);
+  if (separado) return separado[0].replace(/[^A-Z0-9]/g, "");
+  const compact = raw.replace(/[^A-Z0-9]/g, "");
+  const junto = compact.match(/[A-Z]{3}\d{3}|[A-Z]{3}\d{2}[A-Z]/);
+  return junto ? junto[0] : "";
 }
 
 function parecida(a, b) {
@@ -703,7 +706,7 @@ async function previsualizar() {
 function leerLocal(t) {
   t = limpiarTexto(t);
   const pick = (re) => (t.match(re) || [,""])[1].trim();
-  const placa = (pick(/placas?\s*[:\-]?\s*([A-Za-z0-9\-]{4,8})/i) || (t.match(/\b[A-Z]{3}\d{3}\b|\b[A-Z]{3}\d{2}[A-Z]\b/i) || [""])[0]).toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const placa = extraerPlaca(t);
   const meses = { enero:"01", febrero:"02", marzo:"03", abril:"04", mayo:"05", junio:"06", julio:"07", agosto:"08", septiembre:"09", octubre:"10", noviembre:"11", diciembre:"12" };
   const mesDe = (palabra) => meses[String(palabra || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")];
   const anio = (t.match(/20\d{2}/) || ["2026"])[0];
