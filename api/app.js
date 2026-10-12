@@ -9,6 +9,12 @@ function normPlaca(v) {
   return String(v || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
+function formatoPlaca(v) {
+  const p = normPlaca(v);
+  if (/^[A-Z]{3}\d{3}$/.test(p) || /^[A-Z]{3}\d{2}[A-Z]$/.test(p)) return p.slice(0, 3) + " " + p.slice(3);
+  return p;
+}
+
 function send(res, code, body) {
   res.statusCode = code;
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -278,14 +284,14 @@ async function handler(req, res) {
       let lista = db.autorizaciones;
       if (q) lista = lista.filter(a => normPlaca(a.placa) === q);
       return send(res, 200, {
-        autorizaciones: lista.map(a => ({ ...a, vigencia: vigencia(a) }))
+        autorizaciones: lista.map(a => ({ ...a, placa: formatoPlaca(a.placa), vigencia: vigencia(a) }))
       });
     }
 
     if (path === "/autorizaciones" && method === "POST") {
       if (!["administrador", "master"].includes(me.rol)) return send(res, 403, { error: "Solo administrador o master cargan permisos" });
       const parsed = body.texto ? parseAutorizacion(body.texto) : {};
-      const placa = normPlaca(body.placa || parsed.placa);
+      const placa = formatoPlaca(body.placa || parsed.placa);
       const nombre = (body.nombre || parsed.nombre || "").trim();
       if (!placa || !nombre) return send(res, 400, { error: "Se necesita placa y nombre. Revisa el texto o completa los campos." });
       const ahora = new Date();
@@ -313,7 +319,7 @@ async function handler(req, res) {
         creadoEn: ahora.toISOString(),
         creadoEnBogota: bogotaStamp(ahora)
       };
-      db.autorizaciones = db.autorizaciones.filter(a => !(normPlaca(a.placa) === placa && a.fecha === item.fecha && a.solicitud === item.solicitud));
+      db.autorizaciones = db.autorizaciones.filter(a => !(normPlaca(a.placa) === normPlaca(placa) && a.fecha === item.fecha && a.solicitud === item.solicitud));
       db.autorizaciones.push(item);
       await writeDb(db);
       return send(res, 200, { autorizacion: { ...item, vigencia: vigencia(item) }, leido: parsed });
