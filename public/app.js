@@ -49,16 +49,20 @@ function renderTabs() {
 }
 
 async function show(tab) {
-  stopScan();
-  stopPlaca();
+  try { stopScan(); } catch (e) {}
+  try { stopPlaca(); } catch (e) {}
   const panel = $("panel");
-  if (tab === "porteria") panel.innerHTML = porteriaHtml();
-  if (tab === "carga") panel.innerHTML = cargaHtml() + await listaPermisosHtml();
-  if (tab === "permisos") panel.innerHTML = await listaPermisosHtml();
-  if (tab === "usuarios") panel.innerHTML = await usuariosHtml();
-  if (tab === "historial") panel.innerHTML = await historialHtml();
-  if (tab === "perfil") panel.innerHTML = perfilHtml();
-  bind(tab);
+  try {
+    if (tab === "porteria") panel.innerHTML = porteriaHtml();
+    if (tab === "carga") panel.innerHTML = cargaHtml() + await listaPermisosHtml();
+    if (tab === "permisos") panel.innerHTML = await listaPermisosHtml();
+    if (tab === "usuarios") panel.innerHTML = await usuariosHtml();
+    if (tab === "historial") panel.innerHTML = await historialHtml();
+    if (tab === "perfil") panel.innerHTML = perfilHtml();
+    bind(tab);
+  } catch (err) {
+    panel.innerHTML = `<div class="card"><p class="msg err">${err.message || "No se pudo abrir esta opción."}</p></div>`;
+  }
 }
 
 function porteriaHtml() {
@@ -228,31 +232,32 @@ function perfilHtml() {
 }
 
 function bind(tab) {
+  const on = (id, fn) => { const el = $(id); if (el) el.onclick = fn; };
   if (tab === "porteria") {
-    $("buscar").onclick = buscar;
-    $("camara-qr").onclick = toggleQr;
-    $("camara-placa").onclick = togglePlaca;
-    $("placa").addEventListener("keydown", (e) => { if (e.key === "Enter") buscar(); });
+    on("buscar", buscar);
+    on("camara-qr", toggleQr);
+    on("camara-placa", togglePlaca);
+    if ($("placa")) $("placa").addEventListener("keydown", (e) => { if (e.key === "Enter") buscar(); });
   }
   if (tab === "carga") {
-    $("previsualizar").onclick = previsualizar;
-    $("pegar-texto").onclick = pegarTexto;
-    $("texto").addEventListener("paste", () => setTimeout(previsualizar, 50));
+    on("previsualizar", previsualizar);
+    on("pegar-texto", pegarTexto);
+    if ($("texto")) $("texto").addEventListener("paste", () => setTimeout(previsualizar, 50));
   }
   if (tab === "carga" || tab === "permisos") {
     document.querySelectorAll("[data-borrar]").forEach(b => b.onclick = () => borrarPermiso(b.dataset.borrar, tab));
     document.querySelectorAll("[data-ajustar]").forEach(b => b.onclick = () => ajustarPermiso(b.dataset.ajustar, tab));
   }
   if (tab === "usuarios") {
-    $("crear-user").onclick = crearUsuario;
-    $("cambiar-clave").onclick = cambiarClave;
+    on("crear-user", crearUsuario);
+    on("cambiar-clave", cambiarClave);
     document.querySelectorAll("[data-toggle]").forEach(b => b.onclick = () => toggleUser(b.dataset.toggle, b.dataset.activo === "1"));
   }
   if (tab === "historial") {
-    $("exp-excel").onclick = exportarExcel;
-    $("exp-pdf").onclick = exportarPdf;
+    on("exp-excel", exportarExcel);
+    on("exp-pdf", exportarPdf);
   }
-  if (tab === "perfil") $("guardar-foto").onclick = guardarFotoPropia;
+  if (tab === "perfil") on("guardar-foto", guardarFotoPropia);
   document.querySelectorAll("[data-ojo]").forEach(b => b.onclick = () => alternarClave(b.dataset.ojo));
 }
 
@@ -364,7 +369,9 @@ async function buscar() {
     const data = await api("/autorizaciones?placa=" + encodeURIComponent(placa));
     const a = data.autorizaciones[0];
     state.actual = a || null;
-    $("ficha").innerHTML = a ? fichaHtml(a) : `<div class="card">La placa ${placa.toUpperCase()} no está en el listado.</div>`;
+    const ficha = $("ficha");
+    if (!ficha) return;
+    ficha.innerHTML = a ? fichaHtml(a) : `<div class="card">La placa ${placa.toUpperCase()} no está en el listado.</div>`;
     if (a) {
       $("ingreso").onclick = () => registrar("Ingreso");
       $("salida").onclick = () => registrar("Salida");

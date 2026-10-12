@@ -142,7 +142,6 @@ button:disabled { opacity: 0.45; }
   height: 24%;
   border: 3px solid #f5c400;
   border-radius: 8px;
-  box-shadow: 0 0 0 999px rgba(0, 0, 0, .35);
   pointer-events: none;
 }
 .hidden { display: none !important; }
@@ -151,4 +150,4 @@ button:disabled { opacity: 0.45; }
 .placa { font-size: 1.6rem; letter-spacing: 2px; font-weight: 800; }
 .tabs { display: flex; gap: 6px; overflow: auto; margin-top: 10px; }
 .tabs button { width: auto; margin: 0; background: #e2e8f0; color: #1e293b; padding: 10px 12px; font-size: 0.85rem; }
-.tabs button.on { background: #14532d; }
+.tabs button.on { background: #14532d; color: #ffffff; }
