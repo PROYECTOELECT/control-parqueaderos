@@ -65,7 +65,7 @@ function porteriaHtml() {
   return `
     <div class="card">
       <h2>Buscar placa</h2>
-      <p class="muted">La lectura precisa es el QR del permiso. La cámara de placa toma una foto, la lee y la compara con el listado. Confirma la placa antes de registrar.</p>
+      <p class="muted">Encuadra la placa amarilla dentro del recuadro. El lector la busca sola y la compara con los permisos cargados.</p>
       <label>Placa <input id="placa" placeholder="EMP107" autocapitalize="characters"></label>
       <div class="row">
         <button class="ok" id="buscar" type="button">Buscar</button>
@@ -73,9 +73,12 @@ function porteriaHtml() {
         <button class="sec" id="camara-placa" type="button">Placa</button>
       </div>
       <div id="reader" class="hidden"></div>
-      <video id="video-placa" class="hidden" playsinline autoplay muted></video>
+      <div id="placa-visor" class="hidden">
+        <video id="video-placa" playsinline autoplay muted></video>
+        <div class="marco-placa"></div>
+      </div>
       <canvas id="canvas-placa" class="hidden"></canvas>
-      <button class="ok hidden" id="capturar" type="button">Capturar placa</button>
+      <button class="ok hidden" id="capturar" type="button">Leer ahora</button>
       <p id="ocr-estado" class="muted"></p>
       <div id="ficha"></div>
     </div>`;
@@ -407,22 +410,33 @@ async function togglePlaca() {
   if (state.stream) return stopPlaca();
   await stopScan();
   const video = $("video-placa");
+  const visor = $("placa-visor");
   try {
-    const camaras = await navigator.mediaDevices.enumerateDevices();
-    const trasera = camaras.find(d => d.kind === "videoinput" && /back|rear|trasera|environment/i.test(d.label));
     state.stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
-      video: trasera ? { deviceId: { exact: trasera.deviceId } } : { facingMode: { ideal: "environment" } }
+      video: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 }
+      }
     });
+    const track = state.stream.getVideoTracks()[0];
+    const caps = track.getCapabilities ? track.getCapabilities() : {};
+    const advanced = [];
+    if (caps.focusMode && caps.focusMode.includes("continuous")) advanced.push({ focusMode: "continuous" });
+    if (caps.torch) advanced.push({ torch: true });
+    if (advanced.length) { try { await track.applyConstraints({ advanced }); } catch (e) {} }
     video.srcObject = state.stream;
-    video.classList.remove("hidden");
+    visor.classList.remove("hidden");
     await video.play();
     $("capturar").classList.remove("hidden");
     $("capturar").onclick = leerPlacaFoto;
     $("camara-placa").textContent = "Cerrar placa";
-    $("ocr-estado").textContent = "Pon la placa dentro del recuadro amarillo, de frente y sin reflejo. Luego pulsa Capturar placa.";
+    $("ocr-estado").textContent = "Encuadra la placa amarilla dentro del recuadro. El lector busca sola.";
+    state.leyendo = false;
+    state.placaTimer = setInterval(() => { if (!state.leyendo) leerPlacaFoto(true); }, 1600);
   } catch (err) {
-    msg("No se abrió la cámara. Entra por http://localhost o HTTPS y permite la cámara.\n" + err, true);
+    msg("No se abrió la cámara. Entra por HTTPS y permite la cámara.\n" + err, true);
   }
 }
 
@@ -437,74 +451,161 @@ async function motorOcr() {
   });
   await state.ocrWorker.setParameters({
     tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
-    tessedit_pageseg_mode: "7"
+    tessedit_pageseg_mode: "7",
+    classify_bln_numeric_mode: "1"
   });
   return state.ocrWorker;
 }
 
-function prepararPlaca(video) {
-  const canvas = $("canvas-placa");
+function esAmarillo(r, g, b) {
+  return r > 150 && g > 120 && b < 140 && r > b + 35 && g > b + 20;
+}
+
+function recortePlaca(video) {
   const w = video.videoWidth;
   const h = video.videoHeight;
-  const cw = Math.floor(w * 0.92);
-  const ch = Math.floor(h * 0.42);
-  canvas.width = cw * 2;
-  canvas.height = ch * 2;
+  const tmp = document.createElement("canvas");
+  tmp.width = w;
+  tmp.height = h;
+  const tctx = tmp.getContext("2d", { willReadFrequently: true });
+  tctx.drawImage(video, 0, 0);
+  const data = tctx.getImageData(0, 0, w, h).data;
+  let minX = w, minY = h, maxX = 0, maxY = 0, n = 0;
+  const step = 4;
+  for (let y = Math.floor(h * 0.2); y < h * 0.8; y += step) {
+    for (let x = Math.floor(w * 0.05); x < w * 0.95; x += step) {
+      const i = (y * w + x) * 4;
+      if (esAmarillo(data[i], data[i + 1], data[i + 2])) {
+        n++;
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  let sx, sy, sw, sh;
+  if (n > 80 && maxX - minX > w * 0.18 && maxY - minY > 12) {
+    const padX = (maxX - minX) * 0.08;
+    const padY = (maxY - minY) * 0.18;
+    sx = Math.max(0, minX - padX);
+    sy = Math.max(0, minY - padY);
+    sw = Math.min(w - sx, maxX - minX + padX * 2);
+    sh = Math.min(h - sy, maxY - minY + padY * 2);
+  } else {
+    sw = w * 0.86;
+    sh = h * 0.24;
+    sx = (w - sw) / 2;
+    sy = h * 0.34;
+  }
+  const canvas = $("canvas-placa");
+  const outW = 900;
+  const outH = Math.max(180, Math.round(outW * (sh / sw)));
+  canvas.width = outW;
+  canvas.height = outH;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  ctx.drawImage(video, (w - cw) / 2, (h - ch) / 2, cw, ch, 0, 0, canvas.width, canvas.height);
-  const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, outW, outH);
+  const img = ctx.getImageData(0, 0, outW, outH);
   for (let i = 0; i < img.data.length; i += 4) {
-    let g = img.data[i] * 0.3 + img.data[i + 1] * 0.59 + img.data[i + 2] * 0.11;
-    g = Math.max(0, Math.min(255, (g - 128) * 1.6 + 128));
+    let g = img.data[i] * 0.25 + img.data[i + 1] * 0.65 + img.data[i + 2] * 0.1;
+    g = g > 145 ? 255 : 0;
     img.data[i] = img.data[i + 1] = img.data[i + 2] = g;
   }
   ctx.putImageData(img, 0, 0);
   return canvas;
 }
 
-function corregirConListado(texto, placas) {
-  const compact = String(texto || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-  const directa = extraerPlaca(compact);
-  if (directa && placas.some(p => p === directa)) return directa;
-  const cercana = placas.find(p => parecida(p, directa || compact.slice(0, 6)));
-  if (cercana) return cercana;
-  return placas.find(p => compact.includes(p)) || directa || "";
+function distancia(a, b) {
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return dp[m][n];
 }
 
-async function leerPlacaFoto() {
+function normalizarPlaca(s) {
+  const map = { O: "0", Q: "0", D: "0", I: "1", L: "1", Z: "2", S: "5", B: "8", G: "6" };
+  return String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "").split("").map(c => map[c] || c).join("");
+}
+
+function mejorPlaca(textos, placas) {
+  const compactos = textos.map(t => String(t || "").toUpperCase().replace(/[^A-Z0-9]/g, "")).filter(Boolean);
+  const candidatos = [];
+  for (const c of compactos) {
+    const directa = extraerPlaca(c);
+    if (directa) candidatos.push(directa);
+    for (let i = 0; i <= c.length - 6; i++) candidatos.push(c.slice(i, i + 6));
+    if (c.length >= 5 && c.length <= 7) candidatos.push(c);
+  }
+  let mejor = null;
+  for (const placa of placas) {
+    const objetivo = normalizarPlaca(placa);
+    let d = 99;
+    for (const c of candidatos) {
+      d = Math.min(d, distancia(normalizarPlaca(c), objetivo));
+      if (c.includes(placa)) d = 0;
+    }
+    if (!mejor || d < mejor.d) mejor = { placa, d };
+  }
+  if (mejor && mejor.d <= 1) return mejor.placa;
+  const suelta = candidatos.map(extraerPlaca).find(Boolean);
+  return suelta || "";
+}
+
+async function leerPlacaFoto(automatica) {
   const video = $("video-placa");
-  if (!video.videoWidth) return msg("La cámara aún no está lista. Espera un segundo y vuelve a capturar.", true);
-  $("ocr-estado").textContent = "Leyendo placa...";
-  $("capturar").disabled = true;
+  if (!video || !video.videoWidth || state.leyendo) return;
+  state.leyendo = true;
+  if (!automatica) $("ocr-estado").textContent = "Leyendo placa...";
   try {
-    const canvas = prepararPlaca(video);
+    if (!state.placasCache || Date.now() - (state.placasCacheEn || 0) > 20000) {
+      const lista = await api("/autorizaciones");
+      state.placasCache = lista.autorizaciones || [];
+      state.placasCacheEn = Date.now();
+    }
+    const placas = state.placasCache.map(a => a.placa);
+    const canvas = recortePlaca(video);
     const worker = await motorOcr();
-    const result = await worker.recognize(canvas);
-    const lista = await api("/autorizaciones");
-    const placas = lista.autorizaciones.map(a => a.placa);
-    const placa = corregirConListado(result.data.text, placas);
-    if (!placa) {
-      $("ocr-estado").textContent = "No se leyó una placa. Acerca más, evita el reflejo y captura otra vez. Texto visto: " + (result.data.text || "").replace(/\s+/g, " ");
+    const textos = [];
+    for (const modo of ["7", "8", "13"]) {
+      await worker.setParameters({ tessedit_pageseg_mode: modo });
+      const result = await worker.recognize(canvas);
+      textos.push(result.data.text || "");
+      if (mejorPlaca(textos, placas) && placas.includes(mejorPlaca(textos, placas))) break;
+    }
+    const placa = mejorPlaca(textos, placas);
+    if (!placa || !placas.includes(placa)) {
+      if (!automatica) $("ocr-estado").textContent = "No coincidió con un permiso. Acerca la placa al recuadro. Visto: " + textos.join(" ").replace(/\s+/g, " ").slice(0, 40);
       return;
     }
     $("placa").value = placa;
-    $("ocr-estado").textContent = "Placa leída: " + placa + ". Revísala; si está bien, ya se buscó.";
+    $("ocr-estado").textContent = "Placa leída: " + placa;
     await stopPlaca();
     buscar();
   } catch (err) {
-    msg("No se pudo leer la placa. Recarga la página e inténtalo de nuevo.\n" + err, true);
+    if (!automatica) msg("No se pudo leer la placa.\n" + err, true);
   } finally {
+    state.leyendo = false;
     if ($("capturar")) $("capturar").disabled = false;
   }
 }
 
 async function stopPlaca() {
+  if (state.placaTimer) {
+    clearInterval(state.placaTimer);
+    state.placaTimer = null;
+  }
   if (state.stream) {
     state.stream.getTracks().forEach(t => t.stop());
     state.stream = null;
   }
-  const video = $("video-placa");
-  if (video) video.classList.add("hidden");
+  const visor = $("placa-visor");
+  if (visor) visor.classList.add("hidden");
   const cap = $("capturar");
   if (cap) cap.classList.add("hidden");
   const btn = $("camara-placa");
