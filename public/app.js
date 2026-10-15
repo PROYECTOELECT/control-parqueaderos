@@ -98,6 +98,7 @@ function cargaHtml() {
       <div class="row">
         <button class="sec" id="pegar-texto" type="button">Pegar texto</button>
         <button id="previsualizar" type="button">Leer texto</button>
+        <button class="out" id="borrar-texto" type="button">Borrar texto</button>
       </div>
       <div id="preview"></div>
     </div>`;
@@ -242,6 +243,7 @@ function bind(tab) {
   if (tab === "carga") {
     on("previsualizar", previsualizar);
     on("pegar-texto", pegarTexto);
+    on("borrar-texto", borrarTexto);
     if ($("texto")) $("texto").addEventListener("paste", () => setTimeout(previsualizar, 50));
   }
   if (tab === "carga" || tab === "permisos") {
@@ -734,19 +736,32 @@ async function previsualizar() {
   else msg("Texto leído: " + leido.nombre + ", placa " + leido.placa + (leido.fecha ? ", fecha " + leido.fecha : "") + ". Si el texto trae varios días, se usó el primer día. Revisa y guarda.");
 }
 
+function borrarTexto() {
+  const box = $("texto");
+  if (box) box.value = "";
+  const preview = $("preview");
+  if (preview) preview.innerHTML = "";
+  msg("Texto borrado.");
+}
+
 function leerLocal(t) {
   t = limpiarTexto(t);
-  const pick = (re) => (t.match(re) || [,""])[1].trim();
-  const placa = formatoPlaca(extraerPlaca(t));
+  const plano = t.replace(/\s+/g, " ");
+  const pick = (re) => {
+    const m = t.match(re) || plano.match(re);
+    return m ? m[1].trim() : "";
+  };
   const meses = { enero:"01", febrero:"02", marzo:"03", abril:"04", mayo:"05", junio:"06", julio:"07", agosto:"08", septiembre:"09", octubre:"10", noviembre:"11", diciembre:"12" };
   const mesDe = (palabra) => meses[String(palabra || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")];
-  const anio = (t.match(/20\d{2}/) || ["2026"])[0];
+  const anio = (t.match(/20\d{2}/) || [String(new Date().getFullYear())])[0];
+  const cc = pick(/c\.?\s*c\.?\s*[:.]?\s*(\d{6,12})/i) || pick(/c[eé]dula\s*[:\-]?\s*([0-9.\s]{6,16})/i).replace(/\D/g, "");
+  const placaEtiqueta = pick(/(?:placa|veh[ií]culo|parqueadero)\s*[:\-]?\s*(?:veh[ií]culo\s+)?([A-Za-z]{3}\s?\d{2,3}[A-Za-z]?)\b/i);
+  const placa = formatoPlaca(placaEtiqueta || extraerPlaca(t));
   const rangoFecha = t.match(/(\d{1,2})\s+al\s+(\d{1,2})\s+de\s+([A-Za-zÁÉÍÓÚáéíóú]+)/i);
-  const mf = t.match(/(\d{1,2})\s+de\s+([A-Za-zÁÉÍÓÚáéíóú]+)/);
+  const mf = t.match(/(?:fecha\s*[:\-]?\s*)?(?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)?\s*(\d{1,2})\s+de\s+([A-Za-zÁÉÍÓÚáéíóú]+)/i);
   let fecha = "";
   if (rangoFecha && mesDe(rangoFecha[3])) fecha = `${anio}-${mesDe(rangoFecha[3])}-${rangoFecha[1].padStart(2,"0")}`;
   else if (mf && mesDe(mf[2])) fecha = `${anio}-${mesDe(mf[2])}-${mf[1].padStart(2,"0")}`;
-  const rango = t.match(/(\d{1,2})(?::(\d{2}))?\s*(a\.\s*m\.|p\.\s*m\.|am|pm)?\s*a\s*(\d{1,2})(?::(\d{2}))?\s*(a\.\s*m\.|p\.\s*m\.|am|pm)?/i);
   const to24 = (h, min, mer) => {
     let hour = Number(h);
     const m = (mer || "").replace(/\s/g, "").toLowerCase();
@@ -754,7 +769,15 @@ function leerLocal(t) {
     if (m.startsWith("a") && hour === 12) hour = 0;
     return String(hour).padStart(2, "0") + ":" + String(min || "00").padStart(2, "0");
   };
-  let nombre = pick(/nombre\s*[:\-]?\s*(.+)/i);
+  const rango = plano.match(/(\d{1,2})(?::(\d{2}))?\s*(a\.?\s*m\.?|p\.?\s*m\.?|am|pm)?\s*(?:a|-|–|—)\s*(\d{1,2})(?::(\d{2}))?\s*(a\.?\s*m\.?|p\.?\s*m\.?|am|pm)?/i);
+  let horaInicio = "07:00";
+  let horaFin = "13:00";
+  if (rango) {
+    const mer = rango[6] || rango[3] || "";
+    horaInicio = to24(rango[1], rango[2], rango[3] || mer);
+    horaFin = to24(rango[4], rango[5], rango[6] || mer);
+  }
+  let nombre = pick(/nombre\s*[:\-]\s*([^\n*]+)/i);
   if (!nombre) {
     const persona = t.match(/\b(?:director|directora|docente|profesor|profesora|señor|senor|señora|senora|conductor|propietario)\s+([A-Za-zÁÉÍÓÚáéíóúÑñ]+(?:\s+[A-Za-zÁÉÍÓÚáéíóúÑñ]+){1,4})/i);
     if (persona) {
@@ -765,11 +788,11 @@ function leerLocal(t) {
   return {
     placa,
     nombre,
-    cedula: pick(/c[eé]dula\s*[:\-]?\s*([0-9.\s]+)/i),
+    cedula: cc,
     solicitud: (t.match(/SOL-\d+/i) || [""])[0].toUpperCase(),
     fecha,
-    horaInicio: rango ? to24(rango[1], rango[2], rango[3]) : "07:00",
-    horaFin: rango ? to24(rango[4], rango[5], rango[6]) : "13:00"
+    horaInicio,
+    horaFin
   };
 }
 
