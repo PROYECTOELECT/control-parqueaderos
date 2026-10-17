@@ -190,7 +190,7 @@ async function listaPermisosHtml() {
       ${a.nombre}<br>
       <span class="muted">${a.cedula || "—"} · ${a.solicitud} · ${a.fecha || "sin fecha"} ${a.horaInicio}-${a.horaFin}</span><br>
       <span class="muted">Cargado: ${a.creadoEnBogota || a.creadoEn || "sin hora"} · ${a.creadoPorNombre || a.origen || ""}</span><br>
-      ${a.notaAjuste ? `<span class="muted">Ajuste: ${a.notaAjuste} · ${a.ajustadoPor || ""} ${a.ajustadoEn || ""}</span><br>` : ""}
+      ${a.ajustes?.length ? a.ajustes.slice().reverse().map(j => `<span class="muted">Ajuste ${j.en}: ${j.fechaAnterior || "—"} ${j.horaInicioAnterior || ""}-${j.horaFinAnterior || ""} → ${j.fechaNueva} ${j.horaInicioNueva}-${j.horaFinNueva} · ${j.por}${j.nota ? " · " + j.nota : ""}</span><br>`).join("") : ""}
       ${badge(a.vigencia)}
       ${puedeAjustar ? `
         <label>Fecha <input id="aj-fecha-${a.id}" type="date" value="${a.fecha || ""}"></label>
@@ -198,8 +198,8 @@ async function listaPermisosHtml() {
           <label>Desde <input id="aj-ini-${a.id}" type="time" value="${a.horaInicio || "07:00"}"></label>
           <label>Hasta <input id="aj-fin-${a.id}" type="time" value="${a.horaFin || "13:00"}"></label>
         </div>
-        <label>Nota del ajuste <input id="aj-nota-${a.id}" value="${a.notaAjuste || ""}" placeholder="Llegó fuera del horario autorizado"></label>
-        <button class="sec" data-ajustar="${a.id}" type="button">Ajustar horario</button>
+        <label>Nota del ajuste <input id="aj-nota-${a.id}" value="" placeholder="Opcional. Ej: llegó fuera del horario"></label>
+        <button class="ok" data-ajustar="${a.id}" type="button">Aplicar cambios</button>
         <button class="out" data-borrar="${a.id}" type="button">Borrar</button>
       ` : ""}
     </div>`).join("") || "<p class='muted'>Todavía no hay permisos cargados.</p>";
@@ -361,6 +361,22 @@ async function exportarPdf() {
   } catch (err) { msg(err.message, true); }
 }
 
+function ajusteHtml(a) {
+  if (!["administrador", "master"].includes(state.user.rol)) return "";
+  const historial = (a.ajustes || []).slice().reverse().map(j =>
+    `<span class="muted">Ajuste ${j.en}: ${j.fechaAnterior || "—"} ${j.horaInicioAnterior || ""}-${j.horaFinAnterior || ""} → ${j.fechaNueva} ${j.horaInicioNueva}-${j.horaFinNueva} · ${j.por}${j.nota ? " · " + j.nota : ""}</span>`
+  ).join("<br>");
+  return `
+    ${historial}
+    <label>Fecha <input id="aj-fecha-${a.id}" type="date" value="${a.fecha || ""}"></label>
+    <div class="row">
+      <label>Desde <input id="aj-ini-${a.id}" type="time" value="${a.horaInicio || "07:00"}"></label>
+      <label>Hasta <input id="aj-fin-${a.id}" type="time" value="${a.horaFin || "13:00"}"></label>
+    </div>
+    <label>Nota del ajuste <input id="aj-nota-${a.id}" placeholder="Opcional"></label>
+    <button class="ok" data-ajustar="${a.id}" type="button">Aplicar cambios</button>`;
+}
+
 function fichaHtml(a) {
   const puedeEntrar = a.vigencia?.estado === "vigente";
   return `
@@ -370,8 +386,8 @@ function fichaHtml(a) {
       ${badge(a.vigencia)}
       <p><strong>${a.nombre}</strong><br>Cédula ${a.cedula || "—"}</p>
       <p class="muted">Solicitud ${a.solicitud}<br>${a.fecha || "sin fecha"} · ${a.horaInicio} a ${a.horaFin}<br>${a.asunto || ""}<br>${a.solicitante || ""} ${a.programa || ""}</p>
-      ${a.notaAjuste ? `<p class="muted">Ajuste: ${a.notaAjuste}<br>${a.ajustadoPor || ""} · ${a.ajustadoEn || ""}</p>` : ""}
-      ${puedeEntrar ? "" : `<p class="msg err">No se puede registrar el ingreso: ${a.vigencia?.texto || "fuera del horario"}. Un master o el administrador debe ajustar la fecha y el horario.</p>`}
+      ${puedeEntrar ? "" : `<p class="msg err">No se puede registrar el ingreso: ${a.vigencia?.texto || "fuera del horario"}. Ajusta la fecha y el horario y pulsa Aplicar cambios.</p>`}
+      ${ajusteHtml(a)}
       <label>Nota <input id="nota" placeholder="Opcional"></label>
       <div class="row">
         <button class="ok" id="ingreso" type="button" ${puedeEntrar ? "" : "disabled"}>Registrar ingreso</button>
@@ -393,6 +409,7 @@ async function buscar() {
     if (a) {
       $("ingreso").onclick = () => registrar("Ingreso");
       $("salida").onclick = () => registrar("Salida");
+      document.querySelectorAll("[data-ajustar]").forEach(b => b.onclick = () => ajustarPermiso(b.dataset.ajustar, "porteria"));
     }
     $("app-msg").classList.add("hidden");
   } catch (err) { msg(err.message, true); }
@@ -845,19 +862,18 @@ async function guardarAut() {
 }
 
 async function ajustarPermiso(id, tab) {
+  const fecha = $("aj-fecha-" + id)?.value || "";
+  const horaInicio = $("aj-ini-" + id)?.value || "";
+  const horaFin = $("aj-fin-" + id)?.value || "";
+  if (!fecha || !horaInicio || !horaFin) return msg("Completa fecha, hora desde y hora hasta.", true);
   try {
-    await api("/autorizaciones/ajustar", {
+    const data = await api("/autorizaciones/ajustar", {
       method: "POST",
-      body: {
-        id,
-        fecha: $("aj-fecha-" + id).value,
-        horaInicio: $("aj-ini-" + id).value,
-        horaFin: $("aj-fin-" + id).value,
-        notaAjuste: $("aj-nota-" + id).value
-      }
+      body: { id, fecha, horaInicio, horaFin, notaAjuste: $("aj-nota-" + id)?.value || "" }
     });
-    msg("Horario ajustado. La portería ya puede registrar el ingreso si está dentro de la nueva fecha y hora.");
-    show(tab || "permisos");
+    msg("Cambios aplicados. " + data.autorizacion.fecha + " de " + data.autorizacion.horaInicio + " a " + data.autorizacion.horaFin + ". Ajuste: " + data.autorizacion.ajustadoEn + ".");
+    if (tab === "porteria") buscar();
+    else show(tab || "permisos");
   } catch (err) { msg(err.message, true); }
 }
 
