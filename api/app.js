@@ -364,7 +364,8 @@ async function handler(req, res) {
         vigencia: vig.estado,
         registradoPor: me.nombre,
         usuarioId: me.id,
-        nota: String(body.nota || "").slice(0, 300)
+        nota: String(body.nota || "").slice(0, 300),
+        fotoPlaca: tipo === "Ingreso" && String(body.fotoPlaca || "").startsWith("data:image") ? String(body.fotoPlaca).slice(0, 220000) : ""
       };
       db.registros.push(reg);
       await writeDb(db);
