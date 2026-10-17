@@ -258,13 +258,25 @@ async function handler(req, res) {
       const aut = db.autorizaciones.find(a => a.id === body.id);
       if (!aut) return send(res, 404, { error: "Permiso no encontrado" });
       if (!body.fecha || !body.horaInicio || !body.horaFin) return send(res, 400, { error: "Faltan fecha u horario" });
-      if (!String(body.notaAjuste || "").trim()) return send(res, 400, { error: "Escribe la nota del ajuste" });
+      const ahora = new Date();
+      const ajuste = {
+        fechaAnterior: aut.fecha || "",
+        horaInicioAnterior: aut.horaInicio || "",
+        horaFinAnterior: aut.horaFin || "",
+        fechaNueva: body.fecha,
+        horaInicioNueva: body.horaInicio,
+        horaFinNueva: body.horaFin,
+        nota: String(body.notaAjuste || "").slice(0, 300),
+        por: me.nombre,
+        en: bogotaStamp(ahora)
+      };
       aut.fecha = body.fecha;
       aut.horaInicio = body.horaInicio;
       aut.horaFin = body.horaFin;
-      aut.notaAjuste = String(body.notaAjuste).slice(0, 300);
+      aut.notaAjuste = ajuste.nota;
       aut.ajustadoPor = me.nombre;
-      aut.ajustadoEn = bogotaStamp(new Date());
+      aut.ajustadoEn = ajuste.en;
+      aut.ajustes = [...(aut.ajustes || []), ajuste];
       await writeDb(db);
       return send(res, 200, { autorizacion: { ...aut, vigencia: vigencia(aut) } });
     }
