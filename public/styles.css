@@ -137,10 +137,10 @@ button:disabled { opacity: 0.45; }
 #canvas-placa { width: 100%; max-height: 90px; margin-top: 8px; background: #fff; border-radius: 8px; }
 .marco-placa {
   position: absolute;
-  left: 12%;
-  right: 12%;
-  top: 36%;
-  height: 28%;
+  left: 18%;
+  right: 18%;
+  top: 42%;
+  height: 16%;
   border: 3px solid #f5c400;
   border-radius: 8px;
   pointer-events: none;

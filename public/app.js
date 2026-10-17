@@ -69,7 +69,7 @@ function porteriaHtml() {
   return `
     <div class="card">
       <h2>Buscar placa</h2>
-      <p class="muted">Encuadra la placa amarilla dentro del recuadro. El lector la busca sola y la compara con los permisos cargados.</p>
+      <p class="muted">Acerca el celular hasta que la placa amarilla llene el recuadro. Evita el reflejo.</p>
       <label>Placa <input id="placa" placeholder="EMP107" autocapitalize="characters"></label>
       <div class="row">
         <button class="ok" id="buscar" type="button">Buscar</button>
@@ -476,7 +476,7 @@ async function motorOcr() {
 }
 
 function esAmarillo(r, g, b) {
-  return r > 140 && g > 110 && b < 170 && r + g > b * 2.2;
+  return r > 175 && g > 145 && b < 105 && Math.abs(r - g) < 70 && r > b + 80 && g > b + 55;
 }
 
 function recortePlaca(video) {
@@ -488,10 +488,12 @@ function recortePlaca(video) {
   const tctx = tmp.getContext("2d", { willReadFrequently: true });
   tctx.drawImage(video, 0, 0);
   const src = tctx.getImageData(0, 0, w, h).data;
-  const filas = [];
-  for (let y = 0; y < h; y += 3) {
-    let n = 0, minX = w, maxX = 0;
-    for (let x = 0; x < w; x += 4) {
+  const x0 = Math.floor(w * 0.18), x1 = Math.floor(w * 0.82);
+  const y0 = Math.floor(h * 0.28), y1 = Math.floor(h * 0.72);
+  let mejor = null;
+  for (let y = y0; y < y1; y += 2) {
+    let n = 0, minX = x1, maxX = x0;
+    for (let x = x0; x < x1; x += 2) {
       const i = (y * w + x) * 4;
       if (esAmarillo(src[i], src[i + 1], src[i + 2])) {
         n++;
@@ -499,46 +501,47 @@ function recortePlaca(video) {
         if (x > maxX) maxX = x;
       }
     }
-    filas.push({ y, n, minX, maxX });
+    if (n >= 6 && maxX - minX > w * 0.08 && (!mejor || n > mejor.n)) mejor = { y, minX, maxX, n };
   }
-  const bandas = [];
-  let actual = null;
-  for (const f of filas) {
-    if (f.n > 8) {
-      if (!actual) actual = { y1: f.y, y2: f.y, minX: f.minX, maxX: f.maxX, n: f.n };
-      else {
-        actual.y2 = f.y;
-        actual.minX = Math.min(actual.minX, f.minX);
-        actual.maxX = Math.max(actual.maxX, f.maxX);
-        actual.n += f.n;
+  let sx, sy, sw, sh;
+  if (mejor) {
+    let top = mejor.y, bottom = mejor.y;
+    for (let y = mejor.y; y > y0; y -= 2) {
+      let n = 0;
+      for (let x = mejor.minX; x < mejor.maxX; x += 3) {
+        const i = (y * w + x) * 4;
+        if (esAmarillo(src[i], src[i + 1], src[i + 2])) n++;
       }
-    } else if (actual) {
-      bandas.push(actual);
-      actual = null;
+      if (n < 4) break;
+      top = y;
+    }
+    for (let y = mejor.y; y < y1; y += 2) {
+      let n = 0;
+      for (let x = mejor.minX; x < mejor.maxX; x += 3) {
+        const i = (y * w + x) * 4;
+        if (esAmarillo(src[i], src[i + 1], src[i + 2])) n++;
+      }
+      if (n < 4) break;
+      bottom = y;
+    }
+    const alto = Math.max(12, bottom - top);
+    const ancho = mejor.maxX - mejor.minX;
+    if (ancho / alto > 1.6 && ancho / alto < 8) {
+      sx = Math.max(0, mejor.minX - ancho * 0.04);
+      sy = Math.max(0, top - alto * 0.15);
+      sw = Math.min(w - sx, ancho * 1.08);
+      sh = Math.min(h - sy, alto * 1.3);
     }
   }
-  if (actual) bandas.push(actual);
-  const centro = h / 2;
-  const placa = bandas
-    .filter(b => b.y2 - b.y1 > 18 && b.maxX - b.minX > w * 0.12)
-    .sort((a, b) => Math.abs((a.y1 + a.y2) / 2 - centro) - Math.abs((b.y1 + b.y2) / 2 - centro))[0];
-  let sx, sy, sw, sh;
-  if (placa) {
-    const padX = (placa.maxX - placa.minX) * 0.06;
-    const padY = (placa.y2 - placa.y1) * 0.12;
-    sx = Math.max(0, placa.minX - padX);
-    sy = Math.max(0, placa.y1 - padY);
-    sw = Math.min(w - sx, placa.maxX - placa.minX + padX * 2);
-    sh = Math.min(h - sy, placa.y2 - placa.y1 + padY * 2);
-  } else {
-    sw = w * 0.72;
-    sh = h * 0.22;
+  if (!sw) {
+    sw = w * 0.5;
+    sh = h * 0.16;
     sx = (w - sw) / 2;
-    sy = (h - sh) / 2;
+    sy = h * 0.42;
   }
   const canvas = $("canvas-placa");
-  const outW = 1100;
-  const outH = Math.max(160, Math.round(outW * (sh / sw)));
+  const outW = 1000;
+  const outH = Math.max(140, Math.round(outW * (sh / sw)));
   canvas.width = outW;
   canvas.height = outH;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
@@ -547,9 +550,8 @@ function recortePlaca(video) {
   ctx.drawImage(video, sx, sy, sw, sh, 0, 0, outW, outH);
   const img = ctx.getImageData(0, 0, outW, outH);
   for (let i = 0; i < img.data.length; i += 4) {
-    const r = img.data[i], g = img.data[i + 1], b = img.data[i + 2];
-    const oscuro = r < 90 && g < 90 && b < 90;
-    const v = oscuro ? 0 : 255;
+    const lum = img.data[i] * 0.3 + img.data[i + 1] * 0.59 + img.data[i + 2] * 0.11;
+    const v = lum < 125 ? 0 : 255;
     img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
   }
   ctx.putImageData(img, 0, 0);
@@ -662,9 +664,10 @@ function formatoPlaca(v) {
 }
 
 function extraerPlaca(text) {
-  const raw = String(text || "").toUpperCase();
-  const separado = raw.match(/[A-Z]{3}[\s.\-]*\d{3}|[A-Z]{3}[\s.\-]*\d{2}[\s.\-]*[A-Z]/);
-  if (separado) return separado[0].replace(/[^A-Z0-9]/g, "");
+  const raw = String(text || "").toUpperCase()
+    .replace(/\b(LUNES|MARTES|MIERCOLES|MIÉRCOLES|JUEVES|VIERNES|SABADO|SÁBADO|DOMINGO|ENERO|FEBRERO|MARZO|ABRIL|MAYO|JUNIO|JULIO|AGOSTO|SEPTIEMBRE|OCTUBRE|NOVIEMBRE|DICIEMBRE)\b/g, " ");
+  const separado = raw.match(/(?:^|[^A-Z])([A-Z]{3}[\s.\-]*\d{3}|[A-Z]{3}[\s.\-]*\d{2}[\s.\-]*[A-Z])(?![A-Z])/);
+  if (separado) return separado[1].replace(/[^A-Z0-9]/g, "");
   const compact = raw.replace(/[^A-Z0-9]/g, "");
   const junto = compact.match(/[A-Z]{3}\d{3}|[A-Z]{3}\d{2}[A-Z]/);
   return junto ? junto[0] : "";
@@ -765,17 +768,21 @@ function leerLocal(t) {
   const to24 = (h, min, mer) => {
     let hour = Number(h);
     const m = (mer || "").replace(/\s/g, "").toLowerCase();
+    if (m === "m" && hour === 12) return "12:00";
     if (m.startsWith("p") && hour < 12) hour += 12;
     if (m.startsWith("a") && hour === 12) hour = 0;
     return String(hour).padStart(2, "0") + ":" + String(min || "00").padStart(2, "0");
   };
-  const rango = plano.match(/(\d{1,2})(?::(\d{2}))?\s*(a\.?\s*m\.?|p\.?\s*m\.?|am|pm)?\s*(?:a|-|–|—)\s*(\d{1,2})(?::(\d{2}))?\s*(a\.?\s*m\.?|p\.?\s*m\.?|am|pm)?/i);
-  let horaInicio = "07:00";
-  let horaFin = "13:00";
+  const rango = plano.match(/(\d{1,2})(?::(\d{2}))?\s*(a\.?\s*m\.?|p\.?\s*m\.?|am|pm|m)?\s*(?:a|hasta(?:\s+las)?|-|–|—)\s*(?:las\s+)?(\d{1,2})(?::(\d{2}))?\s*(a\.?\s*m\.?|p\.?\s*m\.?|am|pm|m)?/i);
+  let horaInicio = "";
+  let horaFin = "";
   if (rango) {
-    const mer = rango[6] || rango[3] || "";
+    const mer = rango[7] || rango[3] || "";
     horaInicio = to24(rango[1], rango[2], rango[3] || mer);
-    horaFin = to24(rango[4], rango[5], rango[6] || mer);
+    horaFin = to24(rango[5], rango[6], rango[7] || mer);
+  } else {
+    horaInicio = "07:00";
+    horaFin = "13:00";
   }
   let nombre = pick(/nombre\s*[:\-]\s*([^\n*]+)/i);
   if (!nombre) {
