@@ -278,6 +278,18 @@ async function ingresosDelRango() {
   return lista.sort((a, b) => String(a.fechaHoraBogota || "").localeCompare(String(b.fechaHoraBogota || "")));
 }
 
+function fotoPlacaActual() {
+  const origen = $("canvas-placa");
+  if (!origen || !origen.width) return "";
+  const max = 640;
+  const escala = Math.min(1, max / origen.width);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(origen.width * escala));
+  canvas.height = Math.max(1, Math.round(origen.height * escala));
+  canvas.getContext("2d").drawImage(origen, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", 0.62);
+}
+
 function filasReporte(lista) {
   return lista.map(r => ({
     fechaHora: r.fechaHoraBogota || r.fechaHoraLocal || "",
@@ -287,7 +299,8 @@ function filasReporte(lista) {
     solicitud: r.solicitud || "",
     vigencia: r.vigencia || "",
     registradoPor: r.registradoPor || "",
-    nota: r.nota || ""
+    nota: r.nota || "",
+    fotoPlaca: r.fotoPlaca || ""
   }));
 }
 
@@ -321,7 +334,8 @@ async function exportarPdf() {
     const cuerpo = filas.map(r => `<tr>
       <td>${r.fechaHora}</td><td>${r.placa}</td><td>${r.nombre}</td><td>${r.cedula}</td>
       <td>${r.solicitud}</td><td>${r.vigencia}</td><td>${r.registradoPor}</td><td>${r.nota}</td>
-    </tr>`).join("") || `<tr><td colspan="8">Sin ingresos en este rango</td></tr>`;
+      <td>${r.fotoPlaca ? `<img src="${r.fotoPlaca}" alt="Placa ${r.placa}">` : "Sin imagen"}</td>
+    </tr>`).join("") || `<tr><td colspan="9">Sin ingresos en este rango</td></tr>`;
     const win = window.open("", "_blank");
     if (!win) throw new Error("El navegador bloqueó la ventana. Permite ventanas emergentes para el PDF.");
     win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Ingresos ${ini} a ${fin}</title>
@@ -330,13 +344,14 @@ async function exportarPdf() {
         h1 { font-size: 18px; margin-bottom: 4px; }
         p { color: #444; font-size: 12px; }
         table { width: 100%; border-collapse: collapse; font-size: 11px; }
-        th, td { border: 1px solid #ccc; padding: 6px; text-align: left; }
+        th, td { border: 1px solid #ccc; padding: 6px; text-align: left; vertical-align: top; }
         th { background: #14532d; color: white; }
+        img { width: 160px; height: auto; background: #fff; }
       </style></head><body>
       <h1>Reporte de ingreso de vehículos</h1>
       <p>Rango: ${ini} a ${fin}. Zona: America/Bogota. Total: ${filas.length}.</p>
       <table><thead><tr>
-        <th>Fecha y hora</th><th>Placa</th><th>Nombre</th><th>Cédula</th><th>Solicitud</th><th>Vigencia</th><th>Registrado por</th><th>Nota</th>
+        <th>Fecha y hora</th><th>Placa</th><th>Nombre</th><th>Cédula</th><th>Solicitud</th><th>Vigencia</th><th>Registrado por</th><th>Nota</th><th>Placa escaneada</th>
       </tr></thead><tbody>${cuerpo}</tbody></table>
       </body></html>`);
     win.document.close();
@@ -351,6 +366,7 @@ function fichaHtml(a) {
   return `
     <div class="card">
       <div class="placa">${a.placa}</div>
+      ${state.fotoPlaca ? `<img class="placa-foto" src="${state.fotoPlaca}" alt="Placa escaneada">` : ""}
       ${badge(a.vigencia)}
       <p><strong>${a.nombre}</strong><br>Cédula ${a.cedula || "—"}</p>
       <p class="muted">Solicitud ${a.solicitud}<br>${a.fecha || "sin fecha"} · ${a.horaInicio} a ${a.horaFin}<br>${a.asunto || ""}<br>${a.solicitante || ""} ${a.programa || ""}</p>
@@ -385,7 +401,11 @@ async function buscar() {
 async function registrar(tipo) {
   if (!state.actual) return;
   try {
-    const data = await api("/registros", { method: "POST", body: { placa: state.actual.placa, tipo, nota: $("nota")?.value || "" } });
+    const data = await api("/registros", {
+      method: "POST",
+      body: { placa: state.actual.placa, tipo, nota: $("nota")?.value || "", fotoPlaca: tipo === "Ingreso" ? state.fotoPlaca || "" : "" }
+    });
+    if (tipo === "Ingreso") state.fotoPlaca = "";
     msg(tipo + " guardado para " + data.registro.placa + ".\n" + data.registro.fechaHoraBogota + " (America/Bogota).");
   } catch (err) { msg(err.message, true); }
 }
@@ -629,6 +649,7 @@ async function leerPlacaFoto(automatica) {
       return;
     }
     $("placa").value = formatoPlaca(placa);
+    state.fotoPlaca = fotoPlacaActual();
     $("ocr-estado").textContent = "Placa leída: " + formatoPlaca(placa);
     await stopPlaca();
     buscar();
